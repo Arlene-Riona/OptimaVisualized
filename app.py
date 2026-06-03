@@ -155,8 +155,10 @@ elif st.session_state.app_screen == "HUD":
             
     st.write("---")
     
-    # Environment Skinning & Background Association Logic
+    # --- FIXED: Explicitly declare scenario variable from session state ---
     scenario = st.session_state.selected_scenario
+    
+    # Environment Skinning & Background Association Logic
     if "Ocean" in scenario:
         X, Y, Z = landscapes.get_trench_escape_data()
         terrain_colorscale = [[0, '#010b1a'], [0.4, '#0a2c5c'], [0.8, '#1e71cc'], [1, '#ffffff']]
@@ -186,7 +188,6 @@ elif st.session_state.app_screen == "HUD":
     )])
     
     # --- PERSISTENT SCATTER PLOT OVERLAY ENGINE ---
-    # If optimization coordinates exist in memory, automatically map them over the mesh layout canvas
     if st.session_state.simulation_path is not None:
         path_data = st.session_state.simulation_path
         
@@ -277,16 +278,19 @@ elif st.session_state.app_screen == "HUD":
             # Setup a standard starting coordinate high up on the mountain ridge grid
             start_x, start_y = 2.0, 2.0
             
-            # Extract landscape helper equations dynamically
+            # --- INCORPORATED: Safe Fitness & Gradient Clipping Selection Layers ---
             if "Ocean" in scenario:
                 fit_func = landscapes.rosenbrock_fitness if hasattr(landscapes, 'rosenbrock_fitness') else lambda x, y: (1-x)**2 + 100*(y-x**2)**2
-                grad_func = landscapes.rosenbrock_gradient if hasattr(landscapes, 'rosenbrock_gradient') else lambda x, y: (2*(x-1) - 400*x*(y-x**2), 200*(y-x**2))
+                raw_grad = landscapes.rosenbrock_gradient if hasattr(landscapes, 'rosenbrock_gradient') else lambda x, y: (2*(x-1) - 400*x*(y-x**2), 200*(y-x**2))
+                grad_func = lambda x, y: tuple(np.clip(raw_grad(x, y), -50.0, 50.0))
             elif "Cyberpunk" in scenario:
                 fit_func = landscapes.ackley_fitness if hasattr(landscapes, 'ackley_fitness') else lambda x, y: -20*np.exp(-0.2*np.sqrt(0.5*(x**2+y**2)))
-                grad_func = landscapes.ackley_gradient if hasattr(landscapes, 'ackley_gradient') else lambda x, y: (x*0.1, y*0.1)
+                raw_grad = landscapes.ackley_gradient if hasattr(landscapes, 'ackley_gradient') else lambda x, y: (x*0.1, y*0.1)
+                grad_func = lambda x, y: tuple(np.clip(raw_grad(x, y), -50.0, 50.0))
             else:
                 fit_func = landscapes.rastrigin_fitness if hasattr(landscapes, 'rastrigin_fitness') else lambda x, y: x**2 + y**2 - 10*np.cos(2*np.pi*x) - 10*np.cos(2*np.pi*y) + 20
-                grad_func = landscapes.rastrigin_gradient if hasattr(landscapes, 'rastrigin_gradient') else lambda x, y: (2*x + 20*np.pi*np.sin(2*np.pi*x), 2*y + 20*np.pi*np.sin(2*np.pi*y))
+                raw_grad = landscapes.rastrigin_gradient if hasattr(landscapes, 'rastrigin_gradient') else lambda x, y: (2*x + 20*np.pi*np.sin(2*np.pi*x), 2*y + 20*np.pi*np.sin(2*np.pi*y))
+                grad_func = lambda x, y: tuple(np.clip(raw_grad(x, y), -50.0, 50.0))
 
             # Store the resulting data straight into state memory before prompting the refresh signal
             if "Momentum" in st.session_state.selected_algo:
@@ -294,7 +298,6 @@ elif st.session_state.app_screen == "HUD":
             elif "Adam" in st.session_state.selected_algo:
                 st.session_state.simulation_path = optimizers.simulate_adam(start_x, start_y, grad_func, steps=40, lr=0.15)
             elif "Grey Wolf" in st.session_state.selected_algo:
-                # Wrap the returned frame list inside an explicit numpy array layout matrix structure
                 st.session_state.simulation_path = np.array(optimizers.simulate_agwo(start_x, start_y, fit_func, steps=35, num_wolves=10))
                 
             st.rerun()
