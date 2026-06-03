@@ -116,27 +116,25 @@ if st.session_state.app_screen == "WELCOME":
             label_visibility="collapsed"
         )
             
-        # 3. Action Button (The CSS flexbox wrapper above will now lock this to the exact center)
+        # 3. Action Button
         if st.button("INITIALIZE MISSION DESCENT"):
             st.session_state.selected_algo = algo_choice
             st.session_state.selected_scenario = scenario_choice
             st.session_state.app_screen = "HUD"
             st.rerun()
 
-
 # =====================================================================
-# SCREEN 2: THE FULL-SCREEN TACTICAL HUD
+# SCREEN 2: THE FULL-SCREEN TACTICAL HUD (IMMERSIVE MULTIMODAL MODE)
 # =====================================================================
 elif st.session_state.app_screen == "HUD":
-    # Clean top navigation line
+    
+    # Top navigation line
     hud_cols = st.columns([3, 1])
     with hud_cols[0]:
-        # Cleaned up, less wordy subtitle metrics
         short_algo = st.session_state.selected_algo.split('(')[0].strip()
         short_scenario = st.session_state.selected_scenario.split('(')[0].strip()
         st.markdown(f"### 🛰️ OPTIMA_VISUALIZED // {short_algo.upper()} // {short_scenario.upper()}")
     with hud_cols[1]:
-        # Small, clean back button pushed to the right side
         st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
         if st.button("← Go Back"):
             st.session_state.app_screen = "WELCOME"
@@ -145,60 +143,88 @@ elif st.session_state.app_screen == "HUD":
             
     st.write("---")
     
-    # Load corresponding data configurations and apply dynamic environment theme properties
+    # Environment Skinning & Background Association Logic
+    # Environment Skinning & Background Association Logic
     scenario = st.session_state.selected_scenario
     if "Ocean" in scenario:
         X, Y, Z = landscapes.get_trench_escape_data()
         terrain_colorscale = [[0, '#010b1a'], [0.4, '#0a2c5c'], [0.8, '#1e71cc'], [1, '#ffffff']]
-        bg_color = "#01050d"
         radar_line_color = "#00ffff"
-        mission_log = "🌌 **MISSION BRIEFING:** We are navigating a narrow deep-sea chasm. The problem? The floor is almost completely flat. Without momentum, your tracker will run out of speed and get stuck halfway through the escape trench."
+        # Deep, dark abyssal blue water texture with zero land or sun
+        bg_image_url = "https://images.unsplash.com/photo-1518156677180-95a2893f3e9f?auto=format&fit=crop&w=1920&q=80"
+        mission_log = "🌌 **MISSION BRIEFING:** We are navigating a narrow deep-sea chasm. The floor is almost completely flat. Without momentum, your tracker will run out of speed and get stuck halfway through the escape trench."
     elif "Cyberpunk" in scenario:
         X, Y, Z = landscapes.get_cyberpunk_matrix_data()
         terrain_colorscale = [[0, '#05010a'], [0.3, '#32045c'], [0.7, '#88069e'], [1, '#ff007f']]
-        bg_color = "#020005"
         radar_line_color = "#ff007f"
+        # Pure dark retro synthwave grid lines with a neon skyline aesthetic
+        bg_image_url = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=1920&q=80"
         mission_log = "⚡ **MISSION BRIEFING:** We are intercepting an encrypted corporate broadcast. The terrain drops into violent, unpredictable cliffs. Static step updates will overshoot completely; we need an adaptive learning speed."
     else:
         X, Y, Z = landscapes.get_desert_swarm_data()
         terrain_colorscale = [[0, '#1a0600'], [0.4, '#5c1903'], [0.8, '#c74416'], [1, '#ffa473']]
-        bg_color = "#080200"
         radar_line_color = "#ff4500"
-        mission_log = "🏜️ **MISSION BRIEFING:** A sandstorm scattered our sensor array into hundreds of identical sand dunes. Single tracking units will get trapped instantly. We must run a collaborative wolf pack to find the absolute center."
+        # Harsh, hot glowing orange copper sand textures and dust storms
+        bg_image_url = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1920&q=80"
+        mission_log = "🏜️ **MISSION BRIEFING:** A sandstorm scattered our sensor array into hundreds of identical sand dunes. Isolated trackers are highly vulnerable to localized trap dunes."
 
-    # Build the full-bleed 3D surface plot
+    # 1. Build the 3D surface plot with a completely transparent paper/plot profile
     fig = go.Figure(data=[go.Surface(
         z=Z, x=X, y=Y, 
         colorscale=terrain_colorscale, 
         showscale=False,
-        opacity=0.9,
+        opacity=0.8,
         contours_z=dict(show=True, usecolormap=False, highlightcolor=radar_line_color, project_z=True, color=radar_line_color)
     )])
     
     fig.update_layout(
         scene=dict(
-            xaxis=dict(backgroundcolor=bg_color, gridcolor="#1e293b", showbackground=True, title="X Axis"),
-            yaxis=dict(backgroundcolor=bg_color, gridcolor="#1e293b", showbackground=True, title="Y Axis"),
-            zaxis=dict(backgroundcolor=bg_color, gridcolor="#1e293b", showbackground=True, title="Loss/Elevation"),
+            xaxis=dict(backgroundcolor="rgba(0,0,0,0)", gridcolor="rgba(255,255,255,0.1)", showbackground=True, title="X Axis"),
+            yaxis=dict(backgroundcolor="rgba(0,0,0,0)", gridcolor="rgba(255,255,255,0.1)", showbackground=True, title="Y Axis"),
+            zaxis=dict(backgroundcolor="rgba(0,0,0,0)", gridcolor="rgba(255,255,255,0.1)", showbackground=True, title="Loss"),
         ),
-        paper_bgcolor='rgba(0,0,0,0)', # Fully transparent background container
+        paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         margin=dict(l=0, r=0, b=0, t=0),
         height=550  
     )
 
-    # UI Split: Full-width map top, text parameters directly underneath
+    # 2. INJECT BACKGROUND IMAGE CSS
+    st.markdown(f"""
+        <style>
+        [data-testid="stPlotlyChart"] {{
+            background-image: linear-gradient(to bottom, rgba(6, 2, 15, 0.3), rgba(6, 2, 15, 0.6)), url('{bg_image_url}');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0px 8px 32px rgba(0, 0, 0, 0.6);
+        }}
+        .js-plotly-plot .plotly .main-svg {{
+            background: transparent !important;
+        }}
+        </style>
+    """, unsafe_allow_html=True)
+
+    # 3. RENDER THE PLOT
     st.plotly_chart(fig, use_container_width=True)
     
     st.write("---")
     
-    # Lower user workspace layout
+    # 4. Lower multimodal workspace layout
     log_col, control_col = st.columns([1.2, 1])
     with log_col:
         st.markdown("#### 💬 Mission Guidance AI")
+        st.audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", format="audio/mp3")
         st.info(mission_log)
+        
     with control_col:
         st.markdown("#### 🛰️ Command Terminal")
-        user_input = st.text_input("How do you want to navigate this landscape?", placeholder="e.g., Tell the trackers to accelerate over flat regions...")
+        user_input = st.text_input("Transmit flight directives via text:", placeholder="e.g., Tell the trackers to accelerate over flat regions...")
+        st.caption("🎙️ Or tap to record tactical voice override instruction sequence:")
+        st.button("🔴 TAP TO TRANSMIT VOICE OVERRIDE")
+        st.write("\n")
         if st.button("Run Simulation"):
             st.success("Calculating trajectory vectors...")
