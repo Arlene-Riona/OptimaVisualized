@@ -2,6 +2,17 @@ import streamlit as st
 import plotly.graph_objects as go
 import landscapes
 
+import streamlit as st
+import plotly.graph_objects as go
+import landscapes
+import base64  # <-- Add this built-in library
+
+def get_base64_image(image_path):
+    """Reads a local image file and converts it to a base64 string for CSS insertion."""
+    with open(image_path, "rb") as img_file:
+        encoded = base64.b64encode(img_file.read()).decode()
+    return f"data:image/jpeg;base64,{encoded}"
+
 # 1. System Config & Complete Synthwave Dark Purple Gradient Injection
 st.set_page_config(layout="wide", page_title="OptimaVisualized", initial_sidebar_state="collapsed")
 
@@ -150,22 +161,22 @@ elif st.session_state.app_screen == "HUD":
         X, Y, Z = landscapes.get_trench_escape_data()
         terrain_colorscale = [[0, '#010b1a'], [0.4, '#0a2c5c'], [0.8, '#1e71cc'], [1, '#ffffff']]
         radar_line_color = "#00ffff"
-        # Deep, dark abyssal blue water texture with zero land or sun
-        bg_image_url = "https://images.unsplash.com/photo-1518156677180-95a2893f3e9f?auto=format&fit=crop&w=1920&q=80"
+        # Convert local ocean image to base64
+        bg_image_url = get_base64_image("assets/ocean.jpg")
         mission_log = "🌌 **MISSION BRIEFING:** We are navigating a narrow deep-sea chasm. The floor is almost completely flat. Without momentum, your tracker will run out of speed and get stuck halfway through the escape trench."
     elif "Cyberpunk" in scenario:
         X, Y, Z = landscapes.get_cyberpunk_matrix_data()
         terrain_colorscale = [[0, '#05010a'], [0.3, '#32045c'], [0.7, '#88069e'], [1, '#ff007f']]
         radar_line_color = "#ff007f"
-        # Pure dark retro synthwave grid lines with a neon skyline aesthetic
-        bg_image_url = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=1920&q=80"
+        # Convert local cyberpunk image to base64
+        bg_image_url = get_base64_image("assets/cyberCity.jpg")
         mission_log = "⚡ **MISSION BRIEFING:** We are intercepting an encrypted corporate broadcast. The terrain drops into violent, unpredictable cliffs. Static step updates will overshoot completely; we need an adaptive learning speed."
     else:
         X, Y, Z = landscapes.get_desert_swarm_data()
         terrain_colorscale = [[0, '#1a0600'], [0.4, '#5c1903'], [0.8, '#c74416'], [1, '#ffa473']]
         radar_line_color = "#ff4500"
-        # Harsh, hot glowing orange copper sand textures and dust storms
-        bg_image_url = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1920&q=80"
+        # Convert local desert image to base64
+        bg_image_url = get_base64_image("assets/desert.jpg")
         mission_log = "🏜️ **MISSION BRIEFING:** A sandstorm scattered our sensor array into hundreds of identical sand dunes. Isolated trackers are highly vulnerable to localized trap dunes."
 
     # 1. Build the 3D surface plot with a completely transparent paper/plot profile
