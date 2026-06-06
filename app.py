@@ -411,7 +411,7 @@ elif st.session_state.app_screen == "HUD":
         margin=dict(l=0, r=0, b=40, t=0), height=600, uirevision='constant_view_angle'
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     
     st.write("---")
     
