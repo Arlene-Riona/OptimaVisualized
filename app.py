@@ -2,6 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import landscapes
 import base64
+import json
 import numpy as np
 
 def get_base64_image(image_path):
@@ -90,6 +91,91 @@ if "selected_scenario" not in st.session_state:
     st.session_state.selected_scenario = None
 if "simulation_path" not in st.session_state:
     st.session_state.simulation_path = None
+
+# New variables for the interactive narrative and math achievement mechanics
+if "chat_session" not in st.session_state:
+    st.session_state.chat_session = None
+if "unlocked_math_symbols" not in st.session_state:
+    st.session_state.unlocked_math_symbols = []
+if "hud_stage" not in st.session_state:
+    st.session_state.hud_stage = "STORY_START"  # STAGES: STORY_START -> USER_REPLY -> SIMULATION_ACTIVE
+
+
+def consult_mission_ai_chat(user_directive, current_algo, current_scenario):
+    """
+    Interfaces with Gemini using a persistent chat session to provide
+    dynamic storytelling, conversational pacing, and math unmasking telemetry.
+    """
+    import google.generativeai as genai
+
+    # Base fallback configurations in case the API drops out
+    fallback_response = {
+        "radio_transmission": "Communication array fluctuating. Manual overrides authorized.",
+        "unlock_symbols": [],
+        "learning_rate": 0.15 if "Adam" in current_algo else 0.0015,
+        "momentum_beta": 0.9,
+        "exploration_noise": 0.2
+    }
+
+    # Strict System Instructions to hard-code Gemini's role as a gamified narrator
+    system_prompt = (
+        "You are the immersive, sci-fi tactical Mission Guidance AI for OPTIMA_VISUALIZED, "
+        "a 3D optimization simulator designed to teach complex algorithms through physical analogies.\n\n"
+        f"CURRENT ENVIRONMENT: {current_scenario}\n"
+        f"ACTIVE OPTIMIZER SYSTEM: {current_algo}\n\n"
+        "YOUR ROLE & NARRATIVE FLOW:\n"
+        "1. If the user input is empty or says 'INITIALIZE_ENVIRONMENT', you are in Stage 1. Introduce the "
+        "high-stakes environment with deep sensory details. End your message by asking the operator a direct, "
+        "intuitive question on how they would physically handle this crisis.\n"
+        "2. When the user responds with their strategy, you are in Stage 2. Validate their idea with a tactical "
+        "peer-to-peer tone. Explain clearly, using physical analogies, why simple movement choices will cause failure "
+        "on this landscape. Transition smoothly into explaining how your active optimization algorithm functions as the solution.\n"
+        "3. Keep your descriptions punchy, atmospheric, and focused on bridging the physical landscape to abstract behavior.\n\n"
+        "MATH UNMASKING RULE:\n"
+        "With each response, choose 1 or 2 specific mathematical variable symbols relevant to the active algorithm to 'unlock' "
+        "and explain. Do not dump them all at once. Let them emerge naturally from the physical story.\n"
+        f"- For Momentum, select from: ['w_t', 'grad_w', 'v_t', 'beta']\n"
+        f"- For Adam, select from: ['m_t', 'v_t', 'm_hat', 'v_hat']\n"
+        f"- For Grey Wolf, select from: ['alpha_pos', 'A', 'D']\n\n"
+        "STRICT COMPLIANCE REQUIRED:\n"
+        "You must output your reply ONLY as a valid JSON object matching this exact schema layout:\n"
+        "{\n"
+        '  "radio_transmission": "Your gritty, in-character sci-fi narrative/explanation goes here.",\n'
+        '  "unlock_symbols": ["symbol_id_1", "symbol_id_2"],\n'
+        '  "learning_rate": float (between 0.0005 and 0.5),\n'
+        '  "momentum_beta": float (between 0.5 and 0.99),\n'
+        '  "exploration_noise": float (between 0.05 and 1.0)\n'
+        "}"
+    )
+
+    try:
+        if "GOOGLE_API_KEY" in st.secrets:
+            genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+        else:
+            return fallback_response
+            
+        # 1. Initialize the Chat Session inside Streamlit State if it doesn't exist
+        if st.session_state.chat_session is None:
+            model = genai.GenerativeModel(
+                model_name='gemini-1.5-flash',
+                system_instruction=system_prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            # This creates a history-retaining conversation stream
+            st.session_state.chat_session = model.start_chat(history=[])
+        
+        # 2. Package the directive message
+        message_to_send = user_directive if user_directive.strip() else "INITIALIZE_ENVIRONMENT"
+        
+        # 3. Request completion over the running timeline channel
+        response = st.session_state.chat_session.send_message(message_to_send)
+        
+        # 4. Parse response securely
+        parsed_output = json.loads(response.text)
+        return parsed_output
+        
+    except Exception as e:
+        return fallback_response
 
 # =====================================================================
 # SCREEN 1: THE INITIALIZATION DECK (WELCOME SCREEN)
@@ -330,7 +416,11 @@ elif st.session_state.app_screen == "HUD":
     with log_col:
         st.markdown("#### 💬 Mission Guidance AI")
         st.audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", format="audio/mp3")
-        st.info(mission_log)
+        # Check if Gemini has broadcasted a real-time message override sequence
+        if "mission_override_log" in st.session_state:
+            st.info(st.session_state.mission_override_log)
+        else:
+            st.info(mission_log)
         
     with control_col:
         st.markdown("#### 🛰️ Command Terminal")
@@ -339,12 +429,29 @@ elif st.session_state.app_screen == "HUD":
         st.button("🔴 TAP TO TRANSMIT VOICE OVERRIDE")
         st.write("\n")
         
-        if st.button("Run Simulation"):
-            st.success("Calculating trajectory vectors...")
+        # Update the command loop invocation block to capture the text input stream
+        if st.button("🚀 INITIATE DIRECTIVE SIMULATION"):
+            with st.spinner("Analyzing tactical directives..."):
+                # Pass the terminal prompt input string directly to our Gemini system
+                ai_payload = consult_mission_ai(
+                    user_input, 
+                    st.session_state.selected_algo, 
+                    st.session_state.selected_scenario
+                )
+                
+            # Overwrite the static mission log block with Gemini's narrative radio broadcast response
+            st.session_state.mission_override_log = ai_payload["radio_transmission"]
+            
+            st.success("Trajectory recalculated based on live guidance profiles!")
             
             import optimizers
             start_x, start_y = 2.0, 2.0
             
+            # Extract calculated values directly from the model's structured payload
+            adapted_lr = ai_payload["learning_rate"]
+            adapted_beta = ai_payload["momentum_beta"]
+            
+            # Re-bind fitness evaluation mapping hooks
             if "Ocean" in scenario:
                 raw_grad = landscapes.rosenbrock_gradient if hasattr(landscapes, 'rosenbrock_gradient') else lambda x, y: (2*(x-1) - 400*x*(y-x**2), 200*(y-x**2))
                 grad_func = lambda x, y: tuple(np.clip(raw_grad(x, y), -50.0, 50.0))
@@ -355,11 +462,19 @@ elif st.session_state.app_screen == "HUD":
                 raw_grad = landscapes.rastrigin_gradient if hasattr(landscapes, 'rastrigin_gradient') else lambda x, y: (2*x + 20*np.pi*np.sin(2*np.pi*x), 2*y + 20*np.pi*np.sin(2*np.pi*y))
                 grad_func = lambda x, y: tuple(np.clip(raw_grad(x, y), -50.0, 50.0))
 
+            # Run simulations using the new dynamic hyperparameters injected directly from Gemini!
             if "Momentum" in st.session_state.selected_algo:
-                st.session_state.simulation_path = optimizers.simulate_momentum(start_x, start_y, grad_func, steps=40, lr=0.0015)
+                st.session_state.simulation_path = optimizers.simulate_momentum(
+                    start_x, start_y, grad_func, steps=40, lr=adapted_lr, beta=adapted_beta
+                )
             elif "Adam" in st.session_state.selected_algo:
-                st.session_state.simulation_path = optimizers.simulate_adam(start_x, start_y, grad_func, steps=40, lr=0.15)
+                st.session_state.simulation_path = optimizers.simulate_adam(
+                    start_x, start_y, grad_func, steps=40, lr=adapted_lr, beta1=adapted_beta
+                )
             elif "Grey Wolf" in st.session_state.selected_algo:
-                st.session_state.simulation_path = np.array(optimizers.simulate_agwo(start_x, start_y, f_eval, steps=35, num_wolves=10))
+                # Custom optimization mapping logic pass for structural swarm configurations
+                st.session_state.simulation_path = np.array(optimizers.simulate_agwo(
+                    start_x, start_y, f_eval, steps=35, num_wolves=10
+                ))
                 
             st.rerun()
