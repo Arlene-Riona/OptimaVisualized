@@ -7,9 +7,12 @@ import numpy as np
 
 def get_base64_image(image_path):
     """Reads a local image file and converts it to a base64 string for CSS insertion."""
-    with open(image_path, "rb") as img_file:
-        encoded = base64.b64encode(img_file.read()).decode()
-    return f"data:image/jpeg;base64,{encoded}"
+    try:
+        with open(image_path, "rb") as img_file:
+            encoded = base64.b64encode(img_file.read()).decode()
+        return f"data:image/jpeg;base64,{encoded}"
+    except FileNotFoundError:
+        return ""
 
 # 1. System Config & Complete Synthwave Dark Purple Gradient Injection
 st.set_page_config(layout="wide", page_title="OptimaVisualized", initial_sidebar_state="collapsed")
@@ -92,90 +95,109 @@ if "selected_scenario" not in st.session_state:
 if "simulation_path" not in st.session_state:
     st.session_state.simulation_path = None
 
-# New variables for the interactive narrative and math achievement mechanics
+# Core runtime hooks for conversational memory and pacing matrices
 if "chat_session" not in st.session_state:
     st.session_state.chat_session = None
 if "unlocked_math_symbols" not in st.session_state:
     st.session_state.unlocked_math_symbols = []
 if "hud_stage" not in st.session_state:
-    st.session_state.hud_stage = "STORY_START"  # STAGES: STORY_START -> USER_REPLY -> SIMULATION_ACTIVE
+    st.session_state.hud_stage = "STORY_START"  # STAGES: STORY_START -> SIMULATION_ACTIVE
+if "ready_for_plot" not in st.session_state:
+    st.session_state.ready_for_plot = False
+if "current_hyperparameters" not in st.session_state:
+    st.session_state.current_hyperparameters = {}
 
 
 def consult_mission_ai_chat(user_directive, current_algo, current_scenario):
     """
-    Interfaces with Gemini using a persistent chat session to provide
-    dynamic storytelling, conversational pacing, and math unmasking telemetry.
+    Interfaces with Gemini using the modern google-genai SDK and a persistent 
+    chat session to provide dynamic narrative-driven gamified orchestration.
     """
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
 
-    # Base fallback configurations in case the API drops out
+    # Safe system default structures if the pipe drops out
     fallback_response = {
         "radio_transmission": "Communication array fluctuating. Manual overrides authorized.",
         "unlock_symbols": [],
+        "ready_to_simulate": False,
         "learning_rate": 0.15 if "Adam" in current_algo else 0.0015,
         "momentum_beta": 0.9,
         "exploration_noise": 0.2
     }
 
-    # Strict System Instructions to hard-code Gemini's role as a gamified narrator
+    # System prompt hard-coding behavioral expectations
     system_prompt = (
         "You are the immersive, sci-fi tactical Mission Guidance AI for OPTIMA_VISUALIZED, "
         "a 3D optimization simulator designed to teach complex algorithms through physical analogies.\n\n"
         f"CURRENT ENVIRONMENT: {current_scenario}\n"
         f"ACTIVE OPTIMIZER SYSTEM: {current_algo}\n\n"
         "YOUR ROLE & NARRATIVE FLOW:\n"
-        "1. If the user input is empty or says 'INITIALIZE_ENVIRONMENT', you are in Stage 1. Introduce the "
-        "high-stakes environment with deep sensory details. End your message by asking the operator a direct, "
-        "intuitive question on how they would physically handle this crisis.\n"
-        "2. When the user responds with their strategy, you are in Stage 2. Validate their idea with a tactical "
-        "peer-to-peer tone. Explain clearly, using physical analogies, why simple movement choices will cause failure "
-        "on this landscape. Transition smoothly into explaining how your active optimization algorithm functions as the solution.\n"
-        "3. Keep your descriptions punchy, atmospheric, and focused on bridging the physical landscape to abstract behavior.\n\n"
-        "MATH UNMASKING RULE:\n"
-        "With each response, choose 1 or 2 specific mathematical variable symbols relevant to the active algorithm to 'unlock' "
-        "and explain. Do not dump them all at once. Let them emerge naturally from the physical story.\n"
-        f"- For Momentum, select from: ['w_t', 'grad_w', 'v_t', 'beta']\n"
-        f"- For Adam, select from: ['m_t', 'v_t', 'm_hat', 'v_hat']\n"
-        f"- For Grey Wolf, select from: ['alpha_pos', 'A', 'D']\n\n"
-        "STRICT COMPLIANCE REQUIRED:\n"
-        "You must output your reply ONLY as a valid JSON object matching this exact schema layout:\n"
+        "1. If the user input is 'INITIALIZE_ENVIRONMENT', paint a simple, high-stakes emergency picture. "
+        "End by asking the operator a direct, simple question on how they would physically handle the landscape hurdle.\n"
+        "2. If the user responds with a strategy or question, analyze it. Connect their physical idea to a mathematical symbol "
+        "and unlock it. Then, IMMEDIATELY tell them what hurdle is left to solve before the system is stable. "
+        "For example: 'Excellent, our torch shows us the steepness—that is the Gradient. But we are still shaking and losing speed! "
+        "How can we build up smooth forward speed so we don't get stuck on flat areas?'\n"
+        "3. Keep the user engaged by only asking for ONE physical fix at a time. Once they have addressed the core concepts "
+        "(e.g., slope/gradient AND momentum/velocity), unlock the remaining symbols, explain the final master formula, "
+        "and explicitly tell them: 'System synchronized! You are clear to hit the ENGAGE LIVE PLOT button below!' Then set 'ready_to_simulate' to true.\n\n"
+        "MATH UNMASKING DESIGNATIONS:\n"
+        "- For Momentum: ['w_t', 'grad_w', 'v_t', 'beta']\n"
+        "- For Adam: ['m_t', 'v_t', 'm_hat', 'v_hat']\n"
+        "- For Grey Wolf: ['alpha_pos', 'A', 'D', 'a_factor']\n\n"
+        "STRICT COMPLIANCE STRUCTURE: You must output your reply ONLY as a valid JSON object matching this schema layout:\n"
         "{\n"
-        '  "radio_transmission": "Your gritty, in-character sci-fi narrative/explanation goes here.",\n'
+        '  "radio_transmission": "Your tactical, responsive, narrative-driven text here.",\n'
         '  "unlock_symbols": ["symbol_id_1", "symbol_id_2"],\n'
-        '  "learning_rate": float (between 0.0005 and 0.5),\n'
-        '  "momentum_beta": float (between 0.5 and 0.99),\n'
-        '  "exploration_noise": float (between 0.05 and 1.0)\n'
+        '  "ready_to_simulate": boolean,\n'
+        '  "learning_rate": float,\n'
+        '  "momentum_beta": float,\n'
+        '  "exploration_noise": float\n'
         "}"
     )
 
     try:
         if "GOOGLE_API_KEY" in st.secrets:
-            genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+            api_key_val = st.secrets["GOOGLE_API_KEY"]
         else:
             return fallback_response
             
-        # 1. Initialize the Chat Session inside Streamlit State if it doesn't exist
+        # 1. Initialize the Client inside State so it NEVER closes between page reruns
+        if "ai_client" not in st.session_state or st.session_state.ai_client is None:
+            st.session_state.ai_client = genai.Client(api_key=api_key_val)
+            
+        # 2. Initialize the Chat Session using the persistent state client
         if st.session_state.chat_session is None:
-            model = genai.GenerativeModel(
-                model_name='gemini-1.5-flash',
-                system_instruction=system_prompt,
-                generation_config={"response_mime_type": "application/json"}
+            st.session_state.chat_session = st.session_state.ai_client.chats.create(
+                model="gemini-2.5-flash",
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    response_mime_type="application/json"
+                )
             )
-            # This creates a history-retaining conversation stream
-            st.session_state.chat_session = model.start_chat(history=[])
         
-        # 2. Package the directive message
         message_to_send = user_directive if user_directive.strip() else "INITIALIZE_ENVIRONMENT"
         
-        # 3. Request completion over the running timeline channel
+        # 3. Fire message through the open channel
         response = st.session_state.chat_session.send_message(message_to_send)
         
-        # 4. Parse response securely
+        parsed_output = json.loads(response.text)
+        return parsed_output
+        
+        message_to_send = user_directive if user_directive.strip() else "INITIALIZE_ENVIRONMENT"
+        
+        # Fire message through modern sync multi-turn session channels
+        response = st.session_state.chat_session.send_message(message_to_send)
+        
         parsed_output = json.loads(response.text)
         return parsed_output
         
     except Exception as e:
+        # If any parsing errors happen, print them directly to the console for easier debug checking
+        print(f"[DEBUG LOG AI EXCEPTION]: {str(e)}")
         return fallback_response
+
 
 # =====================================================================
 # SCREEN 1: THE INITIALIZATION DECK (WELCOME SCREEN)
@@ -184,11 +206,8 @@ if st.session_state.app_screen == "WELCOME":
     st.markdown("<h1 class='game-title'>OPTIMA_VISUALIZED</h1>", unsafe_allow_html=True)
     st.markdown("<p class='game-subtitle'>INTERACTIVE 3D LOSS LANDSCAPE EXPEDITION ENGINE</p>", unsafe_allow_html=True)
     
-    # Clean centered column structure
     _, center_col, _ = st.columns([1, 1.6, 1])
-    
     with center_col:
-        # 1. Algorithm Selection
         st.markdown("<p class='center-label'>⚡ Select the optimization algorithm to explore</p>", unsafe_allow_html=True)
         algo_choice = st.selectbox(
             "LABEL_HIDDEN",
@@ -200,7 +219,6 @@ if st.session_state.app_screen == "WELCOME":
             label_visibility="collapsed"
         )
         
-        # 2. Scenario Selection
         st.markdown("<p class='center-label'>🗺️ Select an expedition scenario</p>", unsafe_allow_html=True)
         scenario_choice = st.selectbox(
             "LABEL_HIDDEN_2",
@@ -212,20 +230,23 @@ if st.session_state.app_screen == "WELCOME":
             label_visibility="collapsed"
         )
             
-        # 3. Action Button
         if st.button("INITIALIZE MISSION DESCENT"):
             st.session_state.selected_algo = algo_choice
             st.session_state.selected_scenario = scenario_choice
             st.session_state.simulation_path = None  
             st.session_state.app_screen = "HUD"
+            st.session_state.hud_stage = "STORY_START"
+            st.session_state.unlocked_math_symbols = []
+            st.session_state.chat_session = None
+            st.session_state.ready_for_plot = False
+            if "mission_override_log" in st.session_state:
+                del st.session_state.mission_override_log
             st.rerun()
 
 # =====================================================================
 # SCREEN 2: THE FULL-SCREEN TACTICAL HUD (IMMERSIVE MULTIMODAL MODE)
 # =====================================================================
 elif st.session_state.app_screen == "HUD":
-    
-    # Top navigation line
     hud_cols = st.columns([3, 1])
     with hud_cols[0]:
         short_algo = st.session_state.selected_algo.split('(')[0].strip()
@@ -266,7 +287,6 @@ elif st.session_state.app_screen == "HUD":
         mission_log = "🏜️ **MISSION BRIEFING:** A sandstorm scattered our sensor array into hundreds of identical sand dunes. Isolated trackers are highly vulnerable to localized trap dunes."
         f_eval = landscapes.rastrigin_fitness if hasattr(landscapes, 'rastrigin_fitness') else lambda x, y: x**2 + y**2 - 10*np.cos(2*np.pi*x) - 10*np.cos(2*np.pi*y) + 20
 
-    # Inject Background Layout Styles Natively
     st.markdown(f"""
         <style>
         [data-testid="stPlotlyChart"] {{
@@ -285,7 +305,6 @@ elif st.session_state.app_screen == "HUD":
         </style>
     """, unsafe_allow_html=True)
 
-    # Trace 0: The Base Surface Mesh
     fig = go.Figure(data=[go.Surface(
         z=Z, x=X, y=Y, 
         colorscale=terrain_colorscale, 
@@ -294,12 +313,11 @@ elif st.session_state.app_screen == "HUD":
         contours_z=dict(show=True, usecolormap=False, highlightcolor=radar_line_color, project_z=True, color=radar_line_color)
     )])
 
-    # --- CLIENT-SIDE ANIMATION MATRIX WITH INTEGRATED CONTROLS ---
+    # --- PLOTLY TRAJECTORY ENGINE ---
     if st.session_state.simulation_path is not None:
         path_data = st.session_state.simulation_path
         
-        # Add initial path point configuration trace placeholder (Trace index 1)
-        if len(path_data.shape) == 2:  # Gradient Descents
+        if len(path_data.shape) == 2:  # Descents
             fig.add_trace(go.Scatter3d(
                 x=[path_data[0, 0]], y=[path_data[0, 1]], z=[f_eval(path_data[0, 0], path_data[0, 1])],
                 mode='lines+markers',
@@ -329,7 +347,7 @@ elif st.session_state.app_screen == "HUD":
                     method="animate"
                 ))
                 
-        elif len(path_data.shape) == 3:  # AGWO Swarms
+        elif len(path_data.shape) == 3:  # Swarms
             fig.add_trace(go.Scatter3d(
                 x=path_data[0, :, 0], y=path_data[0, :, 1], z=[f_eval(w[0], w[1]) for w in path_data[0]],
                 mode='markers',
@@ -360,35 +378,24 @@ elif st.session_state.app_screen == "HUD":
 
         fig.frames = frames
         
-        # Inject standard control hardware array directly onto canvas blueprint
         fig.update_layout(
             updatemenus=[dict(
-                type="buttons",
-                direction="left",
-                x=0.05, y=-0.05,
-                xanchor="right", yanchor="top",
-                pad=dict(t=10, r=10),
-                showactive=False,
+                type="buttons", direction="left", x=0.05, y=-0.05, xanchor="right", yanchor="top",
+                pad=dict(t=10, r=10), showactive=False,
                 buttons=[
                     dict(
-                        label="▶ PLAY DESCENT",
-                        method="animate",
+                        label="▶ PLAY DESCENT", method="animate",
                         args=[None, dict(frame=dict(duration=60, redraw=True), fromcurrent=True, mode="immediate", transition=dict(duration=0))]
                     ),
                     dict(
-                        label="⏸ PAUSE",
-                        method="animate",
+                        label="⏸ PAUSE", method="animate",
                         args=[[None], dict(frame=dict(duration=0, redraw=True), mode="immediate", transition=dict(duration=0))]
                     )
                 ]
             )],
             sliders=[dict(
-                active=0,
-                currentvalue=dict(prefix="Mission Iteration Sequence: ", font=dict(color="#00ffcc", size=14)),
-                pad=dict(t=5),
-                x=0.08, y=-0.05,
-                len=0.92,
-                steps=slider_steps
+                active=0, currentvalue=dict(prefix="Mission Iteration Sequence: ", font=dict(color="#00ffcc", size=14)),
+                pad=dict(t=5), x=0.08, y=-0.05, len=0.92, steps=slider_steps
             )]
         )
     else:
@@ -400,11 +407,8 @@ elif st.session_state.app_screen == "HUD":
             yaxis=dict(backgroundcolor="rgba(0,0,0,0)", gridcolor="rgba(255,255,255,0.1)", showbackground=True, title="Y Axis"),
             zaxis=dict(backgroundcolor="rgba(0,0,0,0)", gridcolor="rgba(255,255,255,0.1)", showbackground=True, title="Loss"),
         ),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=0, r=0, b=40, t=0), 
-        height=600,
-        uirevision='constant_view_angle'
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=0, r=0, b=40, t=0), height=600, uirevision='constant_view_angle'
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -416,65 +420,163 @@ elif st.session_state.app_screen == "HUD":
     with log_col:
         st.markdown("#### 💬 Mission Guidance AI")
         st.audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", format="audio/mp3")
-        # Check if Gemini has broadcasted a real-time message override sequence
-        if "mission_override_log" in st.session_state:
-            st.info(st.session_state.mission_override_log)
-        else:
-            st.info(mission_log)
         
+        # Trigger initialization call if the user just spawned into the landscape
+        if "mission_override_log" not in st.session_state:
+            with st.spinner("Establishing secure neural link to tactical guidance satellite..."):
+                ai_payload = consult_mission_ai_chat("INITIALIZE_ENVIRONMENT", st.session_state.selected_algo, st.session_state.selected_scenario)
+                st.session_state.mission_override_log = ai_payload["radio_transmission"]
+                st.session_state.unlocked_math_symbols = ai_payload.get("unlock_symbols", [])
+                st.session_state.ready_for_plot = ai_payload.get("ready_to_simulate", False)
+                st.session_state.current_hyperparameters = {
+                    "lr": ai_payload.get("learning_rate", 0.01),
+                    "beta": ai_payload.get("momentum_beta", 0.9),
+                    "noise": ai_payload.get("exploration_noise", 0.2)
+                }
+                st.rerun()
+
+        st.info(st.session_state.mission_override_log)
+            
+        st.write("---")
+        
+        # --- THE MATH UNMASKING HUD CANVAS ---
+        st.markdown("#### 📐 Recovered Telemetry Formulas")
+        
+        unlocked = st.session_state.unlocked_math_symbols
+        metric_cols = st.columns(4)
+        
+        if "Momentum" in st.session_state.selected_algo:
+            with metric_cols[0]: st.metric("Position Vector", "$w_t$" if "w_t" in unlocked else "🔒 LOCKED")
+            with metric_cols[1]: st.metric("Gradient", r"$\nabla f(w_t)$" if "grad_w" in unlocked else "🔒 LOCKED")
+            with metric_cols[2]: st.metric("Velocity Force", "$v_t$" if "v_t" in unlocked else "🔒 LOCKED")
+            with metric_cols[3]: st.metric("Friction Lag", r"$\beta$" if "beta" in unlocked else "🔒 LOCKED")
+            
+            if all(sym in unlocked for sym in ["w_t", "grad_w", "v_t", "beta"]):
+                st.success("🎯 **HYPERPARAMETER SYSTEM COMPLETE: MATH SYNCHRONIZED**")
+                st.latex(r"v_t = \beta v_{t-1} + \eta \nabla f(w_t)")
+                st.latex(r"w_{t+1} = w_t - v_t")
+                
+        elif "Adam" in st.session_state.selected_algo:
+            with metric_cols[0]: st.metric("1st Moment (Mean)", "$m_t$" if "m_t" in unlocked else "🔒 LOCKED")
+            with metric_cols[1]: st.metric("2nd Moment (Variance)", "$v_t$" if "v_t" in unlocked else "🔒 LOCKED")
+            with metric_cols[2]: st.metric("Bias Corr Mean", r"$\hat{m}_t$" if "m_hat" in unlocked else "🔒 LOCKED")
+            with metric_cols[3]: st.metric("Bias Corr Var", r"$\hat{v}_t$" if "v_hat" in unlocked else "🔒 LOCKED")
+            
+            if all(sym in unlocked for sym in ["m_t", "v_t", "m_hat", "v_hat"]):
+                st.success("🎯 **HYPERPARAMETER SYSTEM COMPLETE: MATH SYNCHRONIZED**")
+                st.latex(r"w_{t+1} = w_t - \frac{\eta}{\sqrt{\hat{v}_t} + \epsilon} \hat{m}_t")
+                
+        elif "Grey Wolf" in st.session_state.selected_algo:
+            with metric_cols[0]: st.metric("Alpha Leader Vector", r"$\vec{X}_\alpha$" if "alpha_pos" in unlocked else "🔒 LOCKED")
+            with metric_cols[1]: st.metric("Encircle Step", r"$\vec{A}$" if "A" in unlocked else "🔒 LOCKED")
+            with metric_cols[2]: st.metric("Distance Variance", r"$\vec{D}$" if "D" in unlocked else "🔒 LOCKED")
+            with metric_cols[3]: st.metric("Convergence Factor", "$a$" if "a_factor" in unlocked else "🔒 LOCKED")
+            
+            if all(sym in unlocked for sym in ["alpha_pos", "A", "D", "a_factor"]):
+                st.success("🎯 **HYPERPARAMETER SYSTEM COMPLETE: MATH SYNCHRONIZED**")
+                st.latex(r"\vec{D} = |\vec{C} \cdot \vec{X}_{\text{leader}} - \vec{X}|")
+                st.latex(r"\vec{X}_{(t+1)} = \frac{\vec{X}_1 + \vec{X}_2 + \vec{X}_3}{3}")
+
+
     with control_col:
         st.markdown("#### 🛰️ Command Terminal")
-        user_input = st.text_input("Transmit flight directives via text:", placeholder="e.g., Tell the trackers to accelerate over flat regions...")
-        st.caption("🎙️ Or tap to record tactical voice override instruction sequence:")
-        st.button("🔴 TAP TO TRANSMIT VOICE OVERRIDE")
-        st.write("\n")
         
-        # Update the command loop invocation block to capture the text input stream
-        if st.button("🚀 INITIATE DIRECTIVE SIMULATION"):
-            with st.spinner("Analyzing tactical directives..."):
-                # Pass the terminal prompt input string directly to our Gemini system
-                ai_payload = consult_mission_ai(
-                    user_input, 
-                    st.session_state.selected_algo, 
-                    st.session_state.selected_scenario
-                )
-                
-            # Overwrite the static mission log block with Gemini's narrative radio broadcast response
-            st.session_state.mission_override_log = ai_payload["radio_transmission"]
+        if st.session_state.hud_stage == "STORY_START":
+            st.markdown("💡 *Communicate with your Mission AI. Ask clarifying questions or propose your physical strategies.*")
             
-            st.success("Trajectory recalculated based on live guidance profiles!")
+            user_input = st.text_input(
+                "Transmit strategy or inquiry query package:", 
+                placeholder="Type your strategic ideas or concept questions here...",
+                key="terminal_text_input"
+            )
             
-            import optimizers
-            start_x, start_y = 2.0, 2.0
+            st.caption("🎙️ Voice link hardware layer placeholder overrides:")
+            st.button("🔴 TAP TO TRANSMIT VOICE OVERRIDE", key="voice_override_btn")
+            st.write("\n")
             
-            # Extract calculated values directly from the model's structured payload
-            adapted_lr = ai_payload["learning_rate"]
-            adapted_beta = ai_payload["momentum_beta"]
+            if st.button("🚀 TRANSMIT COMMUNICATIONS SIGNAL", key="submit_directive_btn"):
+                if not user_input.strip():
+                    st.warning("Please type a question or strategy update string before broadcasting.")
+                else:
+                    with st.spinner("Decoding telemetry payload..."):
+                        ai_payload = consult_mission_ai_chat(user_input, st.session_state.selected_algo, st.session_state.selected_scenario)
+                        
+                        st.session_state.mission_override_log = ai_payload["radio_transmission"]
+                        new_symbols = ai_payload.get("unlock_symbols", [])
+                        st.session_state.unlocked_math_symbols = list(set(st.session_state.unlocked_math_symbols + new_symbols))
+                        
+                        # Dynamically bind status flag and hyperparameters passed back from Gemini
+                        st.session_state.ready_for_plot = ai_payload.get("ready_to_simulate", False)
+                        st.session_state.current_hyperparameters = {
+                            "lr": ai_payload.get("learning_rate", 0.01),
+                            "beta": ai_payload.get("momentum_beta", 0.9),
+                            "noise": ai_payload.get("exploration_noise", 0.2)
+                        }
+                        st.rerun()
             
-            # Re-bind fitness evaluation mapping hooks
-            if "Ocean" in scenario:
-                raw_grad = landscapes.rosenbrock_gradient if hasattr(landscapes, 'rosenbrock_gradient') else lambda x, y: (2*(x-1) - 400*x*(y-x**2), 200*(y-x**2))
-                grad_func = lambda x, y: tuple(np.clip(raw_grad(x, y), -50.0, 50.0))
-            elif "Cyberpunk" in scenario:
-                raw_grad = landscapes.ackley_gradient if hasattr(landscapes, 'ackley_gradient') else lambda x, y: (x*0.1, y*0.1)
-                grad_func = lambda x, y: tuple(np.clip(raw_grad(x, y), -50.0, 50.0))
-            else:
-                raw_grad = landscapes.rastrigin_gradient if hasattr(landscapes, 'rastrigin_gradient') else lambda x, y: (2*x + 20*np.pi*np.sin(2*np.pi*x), 2*y + 20*np.pi*np.sin(2*np.pi*y))
-                grad_func = lambda x, y: tuple(np.clip(raw_grad(x, y), -50.0, 50.0))
+            # Show the unlock button conditionally if Gemini flipped the boolean gate to true
+            if st.session_state.ready_for_plot:
+                st.success("🎯 **PROPULSION MATRICES ALIGNED:** Conceptual bridge confirmed by AI.")
+                if st.button("🔥 UNLOCK & ENGAGE LIVESTREAM TRAJECTORY SIMULATION", key="transition_stage_btn"):
+                    st.session_state.hud_stage = "SIMULATION_ACTIVE"
+                    st.rerun()
 
-            # Run simulations using the new dynamic hyperparameters injected directly from Gemini!
-            if "Momentum" in st.session_state.selected_algo:
-                st.session_state.simulation_path = optimizers.simulate_momentum(
-                    start_x, start_y, grad_func, steps=40, lr=adapted_lr, beta=adapted_beta
-                )
-            elif "Adam" in st.session_state.selected_algo:
-                st.session_state.simulation_path = optimizers.simulate_adam(
-                    start_x, start_y, grad_func, steps=40, lr=adapted_lr, beta1=adapted_beta
-                )
-            elif "Grey Wolf" in st.session_state.selected_algo:
-                # Custom optimization mapping logic pass for structural swarm configurations
-                st.session_state.simulation_path = np.array(optimizers.simulate_agwo(
-                    start_x, start_y, f_eval, steps=35, num_wolves=10
-                ))
+        elif st.session_state.hud_stage == "SIMULATION_ACTIVE":
+            st.success("🛰️ **PROPULSION STAGE RUNNING:** Plotly tracking arrays calculating physics updates.")
+            
+            # Check if simulation path needs initial processing computation run
+            if st.session_state.simulation_path is None:
+                import optimizers
+                start_x, start_y = 2.0, 2.0
+                params = st.session_state.current_hyperparameters
                 
-            st.rerun()
+                if "Ocean" in scenario:
+                    raw_grad = landscapes.rosenbrock_gradient if hasattr(landscapes, 'rosenbrock_gradient') else lambda x, y: (2*(x-1) - 400*x*(y-x**2), 200*(y-x**2))
+                    grad_func = lambda x, y: tuple(np.clip(raw_grad(x, y), -50.0, 50.0))
+                elif "Cyberpunk" in scenario:
+                    raw_grad = landscapes.ackley_gradient if hasattr(landscapes, 'ackley_gradient') else lambda x, y: (x*0.1, y*0.1)
+                    grad_func = lambda x, y: tuple(np.clip(raw_grad(x, y), -50.0, 50.0))
+                else:
+                    raw_grad = landscapes.rastrigin_gradient if hasattr(landscapes, 'rastrigin_gradient') else lambda x, y: (2*x + 20*np.pi*np.sin(2*np.pi*x), 2*y + 20*np.pi*np.sin(2*np.pi*y))
+                    grad_func = lambda x, y: tuple(np.clip(raw_grad(x, y), -50.0, 50.0))
+
+                if "Momentum" in st.session_state.selected_algo:
+                    st.session_state.simulation_path = optimizers.simulate_momentum(
+                        start_x, start_y, grad_func, steps=40, lr=params["lr"], beta=params["beta"]
+                    )
+                elif "Adam" in st.session_state.selected_algo:
+                    st.session_state.simulation_path = optimizers.simulate_adam(
+                        start_x, start_y, grad_func, steps=40, lr=params["lr"], beta1=params["beta"]
+                    )
+                elif "Grey Wolf" in st.session_state.selected_algo:
+                    st.session_state.simulation_path = np.array(optimizers.simulate_agwo(
+                        start_x, start_y, f_eval, steps=35, num_wolves=10
+                    ))
+                st.rerun()
+
+            live_tweak = st.text_input("Send mid-flight steering optimization directive:", placeholder="e.g., We are bouncing too much, stabilize!")
+            if st.button("⚡ TRANSMIT STEERING OVERRIDE", key="live_tweak_btn"):
+                with st.spinner("Processing corrective adjustments mid-flight..."):
+                    ai_payload = consult_mission_ai_chat(f"MID_FLIGHT_ADJUSTMENT: {live_tweak}", st.session_state.selected_algo, st.session_state.selected_scenario)
+                    st.session_state.mission_override_log = ai_payload["radio_transmission"]
+                    st.session_state.current_hyperparameters = {
+                        "lr": ai_payload.get("learning_rate", 0.01),
+                        "beta": ai_payload.get("momentum_beta", 0.9),
+                        "noise": ai_payload.get("exploration_noise", 0.2)
+                    }
+                    # Clear path data to force recomputation on next cycle step run
+                    st.session_state.simulation_path = None
+                    st.rerun()
+                
+            st.write("---")
+            if st.button("🔄 Reset Mission Scenario & Clear Memory", key="reset_mission_btn"):
+                st.session_state.hud_stage = "STORY_START"
+                st.session_state.unlocked_math_symbols = []
+                st.session_state.chat_session = None
+                st.session_state.ai_client = None # Reset client channel here
+                st.session_state.ready_for_plot = False
+                if "mission_override_log" in st.session_state:
+                    del st.session_state.mission_override_log
+                if "simulation_path" in st.session_state:
+                    st.session_state.simulation_path = None
+                st.rerun()
