@@ -1,0 +1,7 @@
+streamlit
+google-genai
+plotly
+numpy
+gTTS
+SpeechRecognition
+pyaudio
